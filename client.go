@@ -3,30 +3,29 @@ package psychoclient
 import (
 	"net/http"
 
-	"golang.org/x/net/proxy"
-
 	utls "github.com/refraction-networking/utls"
+	"golang.org/x/net/proxy"
 )
 
+// ClientConfig : Client hello config
 type ClientConfig struct {
-	clientHelloID   utls.ClientHelloID
-	clientHelloSpec utls.ClientHelloSpec
-	proxyURL        []string
+	ClientHelloID   utls.ClientHelloID
+	ClientHelloSpec utls.ClientHelloSpec
 }
 
 // NewClient : NewClient
-func NewClient(config *ClientConfig) (http.Client, error) {
-	if len(config.proxyURL) > 0 && len(config.proxyURL) > 0 {
-		dialer, err := newConnectDialer(config.proxyURL[0])
+func NewClient(config *ClientConfig, proxyURL ...string) (http.Client, error) {
+	if len(proxyURL) > 0 && len(proxyURL) > 0 {
+		dialer, err := newConnectDialer(proxyURL[0])
 		if err != nil {
 			return http.Client{}, err
 		}
 		return http.Client{
-			Transport: newRoundTripper(config.clientHelloID, config.clientHelloSpec, dialer),
+			Transport: newRoundTripper(config.ClientHelloID, config.ClientHelloSpec, dialer),
 		}, nil
 	} else {
 		return http.Client{
-			Transport: newRoundTripper(config.clientHelloID, config.clientHelloSpec, proxy.Direct),
+			Transport: newRoundTripper(config.ClientHelloID, config.ClientHelloSpec, proxy.Direct),
 		}, nil
 	}
 }
