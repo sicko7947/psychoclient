@@ -77,6 +77,7 @@ var ChromeLatest = utls.ClientHelloSpec{
 	},
 }
 
+// Testsuite : A Testing TLS fingerprint
 var Testsuite = utls.ClientHelloSpec{
 	CipherSuites: []uint16{
 		utls.GREASE_PLACEHOLDER,
@@ -145,6 +146,6 @@ var Testsuite = utls.ClientHelloSpec{
 			utls.CertCompressionBrotli,
 		}},
 		&utls.UtlsGREASEExtension{},
-		&utls.GenericExtension{utls.Id: 0x0029}, // WARNING: UNKNOWN EXTENSION, USE AT YOUR OWN RISK
+		&utls.GenericExtension{Id: 0x0029}, // WARNING: UNKNOWN EXTENSION, USE AT YOUR OWN RISK
 	},
 }

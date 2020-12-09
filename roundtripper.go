@@ -21,7 +21,7 @@ var errProtocolNegotiated = errors.New("protocol negotiated")
 type roundTripper struct {
 	sync.Mutex
 
-	clientHelloId   utls.ClientHelloID
+	clientHelloID   utls.ClientHelloID
 	clientHelloSpec utls.ClientHelloSpec
 
 	cachedConnections map[string]net.Conn
@@ -85,13 +85,16 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	}
 
 	var tlsConn *utls.UConn
-	switch rt.clientHelloId {
+	switch rt.clientHelloID {
 	case utls.HelloCustom:
-		tlsConn = utls.UClient(rawConn, &utls.Config{ServerName: host}, utls.HelloCustom)
-		tlsConn.ApplyPreset(&rt.clientHelloSpec)
+		tlsConn = utls.UClient(rawConn, &utls.Config{NextProtos: []string{"h2", "http/1.1"}, ServerName: host}, utls.HelloCustom)
+		if err = tlsConn.ApplyPreset(&rt.clientHelloSpec); err != nil {
+			_ = tlsConn.Close()
+			return nil, err
+		}
 		break
 	default:
-		tlsConn = utls.UClient(rawConn, &utls.Config{ServerName: host}, rt.clientHelloId)
+		tlsConn = utls.UClient(rawConn, &utls.Config{ServerName: host}, rt.clientHelloID)
 		break
 	}
 
@@ -139,7 +142,7 @@ func newRoundTripper(clientHello utls.ClientHelloID, specs utls.ClientHelloSpec,
 		return &roundTripper{
 			dialer: dialer[0],
 
-			clientHelloId:   clientHello,
+			clientHelloID:   clientHello,
 			clientHelloSpec: specs,
 
 			cachedTransports:  make(map[string]http.RoundTripper),
@@ -149,7 +152,7 @@ func newRoundTripper(clientHello utls.ClientHelloID, specs utls.ClientHelloSpec,
 		return &roundTripper{
 			dialer: proxy.Direct,
 
-			clientHelloId:   clientHello,
+			clientHelloID:   clientHello,
 			clientHelloSpec: specs,
 
 			cachedTransports:  make(map[string]http.RoundTripper),

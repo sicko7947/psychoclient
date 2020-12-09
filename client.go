@@ -9,7 +9,7 @@ import (
 )
 
 type clientConfig struct {
-	clientHello     utls.ClientHelloID
+	clientHelloID   utls.ClientHelloID
 	clientHelloSpec utls.ClientHelloSpec
 	proxyURL        []string
 }
@@ -22,11 +22,11 @@ func NewClient(config *clientConfig) (http.Client, error) {
 			return http.Client{}, err
 		}
 		return http.Client{
-			Transport: newRoundTripper(config.clientHello, config.clientHelloSpec, dialer),
+			Transport: newRoundTripper(config.clientHelloID, config.clientHelloSpec, dialer),
 		}, nil
 	} else {
 		return http.Client{
-			Transport: newRoundTripper(config.clientHello, config.clientHelloSpec, proxy.Direct),
+			Transport: newRoundTripper(config.clientHelloID, config.clientHelloSpec, proxy.Direct),
 		}, nil
 	}
 }
