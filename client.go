@@ -8,14 +8,14 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-type clientConfig struct {
+type ClientConfig struct {
 	clientHelloID   utls.ClientHelloID
 	clientHelloSpec utls.ClientHelloSpec
 	proxyURL        []string
 }
 
 // NewClient : NewClient
-func NewClient(config *clientConfig) (http.Client, error) {
+func NewClient(config *ClientConfig) (http.Client, error) {
 	if len(config.proxyURL) > 0 && len(config.proxyURL) > 0 {
 		dialer, err := newConnectDialer(config.proxyURL[0])
 		if err != nil {
