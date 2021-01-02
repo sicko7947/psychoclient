@@ -43,24 +43,36 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 func (rt *roundTripper) getTransport(req *http.Request, addr string) error {
 	switch strings.ToLower(req.URL.Scheme) {
 	case "http":
-		rt.cachedTransports[addr] = &http.Transport{DialContext: rt.dialer.DialContext}
+		rt.cachedTransports[addr] = &http.Transport{
+			DialContext: rt.dialer.DialContext,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
 		return nil
 	case "https":
+		rt.cachedTransports[addr] = &http2.Transport{
+			DialTLS: rt.dialTLSHTTP2,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
+		return nil
 	default:
 		return fmt.Errorf("invalid URL scheme: [%v]", req.URL.Scheme)
 	}
 
-	_, err := rt.dialTLS(context.Background(), "tcp", addr)
-	switch err {
-	case errProtocolNegotiated:
-	case nil:
-		// Should never happen.
-		panic("dialTLS returned no error when determining cachedTransports")
-	default:
-		return err
-	}
+	// _, err := rt.dialTLS(context.Background(), "tcp", addr)
+	// switch err {
+	// case errProtocolNegotiated:
+	// case nil:
+	// 	// Should never happen.
+	// 	panic("dialTLS returned no error when determining cachedTransports")
+	// default:
+	// 	return err
+	// }
 
-	return nil
+	// return nil
 }
 
 func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -112,10 +124,20 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 	switch tlsConn.ConnectionState().NegotiatedProtocol {
 	case http2.NextProtoTLS:
 		// The remote peer is speaking HTTP 2 + TLS.
-		rt.cachedTransports[addr] = &http2.Transport{DialTLS: rt.dialTLSHTTP2}
+		rt.cachedTransports[addr] = &http2.Transport{
+			DialTLS: rt.dialTLSHTTP2,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
 	default:
 		// Assume the remote peer is speaking HTTP 1.x + TLS.
-		rt.cachedTransports[addr] = &http.Transport{DialTLSContext: rt.dialTLS}
+		rt.cachedTransports[addr] = &http.Transport{
+			DialTLSContext: rt.dialTLS,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
 	}
 
 	// Stash the connection just established for use servicing the
