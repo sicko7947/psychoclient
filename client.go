@@ -15,7 +15,17 @@ type ClientConfig struct {
 
 // NewClient : NewClient
 func NewClient(config *ClientConfig, proxyURL ...string) (http.Client, error) {
-	return http.Client{
-		Transport: newRoundTripper(config.ClientHelloID, config.ClientHelloSpec, proxy.Direct),
-	}, nil
+	if len(proxyURL) > 0 && len(proxyURL) > 0 {
+		dialer, err := newConnectDialer(proxyURL[0])
+		if err != nil {
+			return http.Client{}, err
+		}
+		return http.Client{
+			Transport: newRoundTripper(config.ClientHelloID, config.ClientHelloSpec, dialer),
+		}, nil
+	} else {
+		return http.Client{
+			Transport: newRoundTripper(config.ClientHelloID, config.ClientHelloSpec, proxy.Direct),
+		}, nil
+	}
 }
