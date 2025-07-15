@@ -1,12 +1,11 @@
 package psychoclient
 
 import (
+	"net/http"
 	"net/textproto"
 	"strconv"
 	"strings"
 	"time"
-
-	http "github.com/zMrKrabz/fhttp"
 
 	"golang.org/x/net/http/httpguts"
 )
