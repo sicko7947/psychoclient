@@ -1,6 +1,7 @@
 package psychoclient
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -55,7 +56,6 @@ func (c *Client) DoNewRequest(b *RequestBuilder) (res *http.Response, respBody [
 	}()
 
 	response := <-channel // waiting for channel to receive response
-
 	res = response.httpResponse
 	err = response.err
 
@@ -66,7 +66,7 @@ func (c *Client) DoNewRequest(b *RequestBuilder) (res *http.Response, respBody [
 			body, e := io.ReadAll(res.Body)
 			respBody = body
 			if e != nil {
-				err = err
+				err = fmt.Errorf("error reading response body: %v", e)
 			}
 		}
 	}
@@ -122,7 +122,7 @@ func (c *Client) RoundTripNewRequest(b *RequestBuilder) (res *http.Response, res
 			body, e := io.ReadAll(res.Body)
 			respBody = body
 			if e != nil {
-				err = err
+				err = fmt.Errorf("error reading response body: %v", e)
 			}
 		}
 	}

@@ -56,8 +56,7 @@ func newClient(useDefaultClient bool, followRedirects bool, timeout time.Duratio
 			return http.Client{
 				CheckRedirect: redirectCallback,
 				Transport: &UHTTPTransport{
-					DialContext:          dialer.DialContext,
-					UTLSClientHelloSpecs: getChromeClientHelloSpecs(),
+					DialContext: dialer.DialContext,
 				},
 				Timeout: timeout,
 			}, err
@@ -68,8 +67,7 @@ func newClient(useDefaultClient bool, followRedirects bool, timeout time.Duratio
 	return http.Client{
 		CheckRedirect: redirectCallback,
 		Transport: &UHTTPTransport{
-			DialContext:          dialer.DialContext,
-			UTLSClientHelloSpecs: getChromeClientHelloSpecs(),
+			DialContext: dialer.DialContext,
 		},
 	}, nil
 }
