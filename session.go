@@ -2,9 +2,10 @@ package psychoclient
 
 import (
 	"io"
-	"net/http"
 	"strings"
 	"time"
+
+	http "github.com/bogdanfinn/fhttp"
 
 	"github.com/gogf/gf/v2/container/gmap"
 	"github.com/google/uuid"

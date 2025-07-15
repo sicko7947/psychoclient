@@ -1,7 +1,7 @@
 package psychoclient
 
 import (
-	utls "github.com/refraction-networking/utls"
+	utls "github.com/bogdanfinn/utls"
 )
 
 func getFirefoxClientHelloSpecs() *utls.ClientHelloSpec {

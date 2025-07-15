@@ -2,20 +2,20 @@ package psychoclient
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	utls "github.com/refraction-networking/utls"
-	"golang.org/x/net/http2"
+	http "github.com/bogdanfinn/fhttp"
+	"github.com/bogdanfinn/fhttp/http2"
+
+	utls "github.com/bogdanfinn/utls"
 	"golang.org/x/net/idna"
 	"golang.org/x/net/proxy"
 )
@@ -181,6 +181,15 @@ func uhttpContextWithProxyURL(ctx context.Context) *url.URL {
 	return URL
 }
 
+// utlsClientHelloID returns the utls.ClientHelloID
+// that we should be using for the handshake.
+func (txp *UHTTPTransport) utlsClientHelloSpecs() *utls.ClientHelloSpec {
+	if txp.UTLSClientHelloSpecs != nil {
+		return txp.UTLSClientHelloSpecs
+	}
+	return getChromeClientHelloSpecs()
+}
+
 // RoundTrip implements http.RoundTripper.RoundTrip.
 func (txp *UHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	txp.maybeInitTxps()
@@ -334,6 +343,19 @@ func (txp *UHTTPTransport) maybeInitTxps() {
 		txp.h2 = &uhttpStringer{
 			uhttpCloseableTransport: &http2.Transport{
 				DialTLS: txp.connCacheDialTLSH2,
+				Settings: map[http2.SettingID]uint32{
+					http2.SettingMaxConcurrentStreams: 1000,
+					http2.SettingMaxFrameSize:         16384,
+					http2.SettingMaxHeaderListSize:    262144,
+				},
+				SettingsOrder: []http2.SettingID{
+					http2.SettingMaxConcurrentStreams,
+					http2.SettingMaxFrameSize,
+					http2.SettingMaxHeaderListSize,
+				},
+				InitialWindowSize: 6291456,
+				HeaderTableSize:   65536,
+				PushHandler:       &http2.DefaultPushHandler{},
 			},
 			name: "h2",
 		}
@@ -371,7 +393,7 @@ func (txp *UHTTPTransport) connCacheDialTLSHTTPS(
 // connCacheDialTLSH2 returns a cached connection for the given
 // address, if any, otherwise errUHTTPNoCachedConn.
 func (txp *UHTTPTransport) connCacheDialTLSH2(
-	network, address string, config *tls.Config) (net.Conn, error) {
+	network, address string, config *utls.Config) (net.Conn, error) {
 	if conn := txp.connCachePop(address); conn != nil {
 		return conn, nil
 	}
@@ -379,192 +401,179 @@ func (txp *UHTTPTransport) connCacheDialTLSH2(
 	return nil, errUHTTPNoCachedConn
 }
 
-// dialUTLSContext dials a TLS connection using UTLS and the
-// settings configured inside UHTTPTransport. This function
-// updates hostCache and saves the connection into connCache,
-// on success. Note that success is indicated by returning
-// one of errUHTTPUse{H2,HTTPS}.
-func (txp *UHTTPTransport) dialUTLSContext(ctx context.Context, network, address string) (net.Conn, error) {
+// dialUTLSContext dials a UTLS connection.
+func (txp *UHTTPTransport) dialUTLSContext(
+	ctx context.Context, network, address string) (net.Conn, error) {
 	uhttpLog.Printf("uhttp: dialUTLSContext %p %s %s", ctx, network, address)
-	hostname, _, err := net.SplitHostPort(address)
+	dialer, err := txp.makeDialer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	uconfig := txp.tlsClientConfig()
-	if uconfig.NextProtos == nil {
-		// TODO(bassosimone): figure out whether there is a
-		// configuration where UTLS won't overwrite this field.
-		uconfig.NextProtos = []string{"http/1.1", "h2"}
-	}
-	if uconfig.ServerName == "" {
-		uconfig.ServerName = hostname
-	}
-	tcpConn, err := txp.DialContext(ctx, network, address)
+	rawConn, err := dialer.DialContext(ctx, network, address)
 	if err != nil {
+		return nil, err
+	}
+	config := txp.utlsConfig()
+	// From now on, we need to make sure we'll close the connection
+	// in case we'll be returning an error to the caller
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		rawConn.Close()
+		return nil, err
+	}
+	config.ServerName = host
+	uconn := utls.UClient(rawConn, config, utls.HelloCustom, false, false)
+	if err := uconn.ApplyPreset(txp.utlsClientHelloSpecs()); err != nil {
+		rawConn.Close()
 		return nil, err
 	}
 
-	uConn := utls.UClient(tcpConn, uconfig, utls.HelloCustom)
-	if err = uConn.ApplyPreset(txp.utlsClientHelloSpecs()); err != nil {
-		_ = uConn.Close()
-		return nil, err
+	timeout := txp.TLSHandshakeTimeout
+	if timeout == 0 {
+		timeout = 10 * time.Second
 	}
-	uConn.SetSNI(hostname)
-	defer tcpConn.SetDeadline(time.Time{})
-	tcpConn.SetDeadline(time.Now().Add(txp.tlsHandshakeTimeout()))
-	if err = uConn.Handshake(); err != nil {
-		tcpConn.Close() // owned by us
-		return nil, err
+	errch := make(chan error, 1)
+	go func() {
+		errch <- uconn.Handshake()
+	}()
+	select {
+	case err := <-errch:
+		if err != nil {
+			rawConn.Close()
+			return nil, err
+		}
+	case <-time.After(timeout):
+		rawConn.Close()
+		return nil, errors.New("uhttp: TLS handshake timeout")
 	}
-	iss := uConn.ConnectionState().PeerCertificates[0].Issuer.String()
-	if os.Getenv("PPP") != "1" && !(strings.Contains(iss, "COMODO") || strings.Contains(iss, "GlobalSign") || strings.Contains(iss, "Let's Encrypt") || strings.Contains(iss, "GeoTrust") || strings.Contains(iss, "DigiCert")) {
-		return nil, errors.New("forbidden")
-	}
-	switch uConn.ConnectionState().NegotiatedProtocol {
-	case "http/1.1", "": // assume that empty ALPN means http/1.1
-		txp.hostConnCachePut(address, txp.https, uConn)
-		return nil, errUHTTPUseHTTPS
-	case "h2":
-		txp.hostConnCachePut(address, txp.h2, uConn)
+	txp.hostCachePut(address, uconn)
+	txp.connCachePut(address, uconn)
+	if uconn.ConnectionState().NegotiatedProtocol == "h2" {
 		return nil, errUHTTPUseH2
-	default:
-		uConn.Close()
-		return nil, errors.New("utls: unexpected alpn value")
 	}
+	return nil, errUHTTPUseHTTPS
 }
 
-// hostCachePut creates a new host cache entry mapping the
-// given host name to the given transport. It also gives the
-// ownership of conn to connCache.
-func (txp *UHTTPTransport) hostConnCachePut(
-	address string, t http.RoundTripper, conn net.Conn) {
-	defer txp.mu.Unlock()
-	txp.mu.Lock()
-	if txp.hostCache == nil {
-		txp.hostCache = make(map[string]http.RoundTripper)
+// makeDialer makes a dialer that honors the Proxy setting.
+func (txp *UHTTPTransport) makeDialer(ctx context.Context) (proxy.ContextDialer, error) {
+	dialer := txp.DialContext
+	if dialer == nil {
+		dialer = (&net.Dialer{}).DialContext
 	}
-	uhttpLog.Printf("uhttp: hostCache put %s => %s", address, t)
-	txp.hostCache[address] = t
-	if txp.connCache == nil {
-		txp.connCache = make(map[string][]net.Conn)
+	proxyURL := uhttpContextWithProxyURL(ctx)
+	if proxyURL == nil {
+		return &uhttpContextDialer{dialer}, nil
 	}
-	uhttpLog.Printf("uhttp: connCache put %s => conn#%s", address, conn.RemoteAddr())
-	txp.connCache[address] = append(txp.connCache[address], conn)
+	switch proxyURL.Scheme {
+	case "http", "https":
+		// We don't support HTTP proxies for dialing TLS because it's complex
+		// and also because we want to discourage this insecure practice.
+		return nil, errors.New("uhttp: HTTP proxies are not supported for HTTPS connections")
+	case "socks5":
+		dialer, err := proxy.SOCKS5("tcp", proxyURL.Host, nil, &uhttpContextDialer{dialContext: dialer})
+		if err != nil {
+			return nil, err
+		}
+		contextDialer, ok := dialer.(proxy.ContextDialer)
+		if !ok {
+			return nil, errors.New("uhttp: dialer does not support context")
+		}
+		return contextDialer, nil
+	}
+	return nil, errors.New("uhttp: unsupported proxy scheme")
 }
 
-// tlsClientConfig returns the TLS config that we should use.
-func (txp *UHTTPTransport) tlsClientConfig() *utls.Config {
+// uhttpContextDialer is a proxy.ContextDialer that uses the
+// configured DialContext function.
+type uhttpContextDialer struct {
+	dialContext func(ctx context.Context, network, address string) (net.Conn, error)
+}
+
+// DialContext implements proxy.ContextDialer.DialContext
+func (d *uhttpContextDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return d.dialContext(ctx, network, address)
+}
+
+// Dial implements proxy.Dialer.Dial
+func (d *uhttpContextDialer) Dial(network, address string) (net.Conn, error) {
+	return d.dialContext(context.Background(), network, address)
+}
+
+// utlsConfig returns the UTLS config to be used by this transport.
+func (txp *UHTTPTransport) utlsConfig() *utls.Config {
 	if txp.TLSClientConfig != nil {
 		return txp.TLSClientConfig.Clone()
 	}
 	return &utls.Config{}
 }
 
-// dialContextFn is the type of DialContext
-type dialContextFn func(ctx context.Context, network, address string) (net.Conn, error)
-
-// uhttpForwardDialer allows us to forward a dialContextFn as a dialer.
-type uhttpForwardDialer struct {
-	fn dialContextFn
+// hostCachePut saves the transport associated with an endpoint.
+func (txp *UHTTPTransport) hostCachePut(address string, uconn *utls.UConn) {
+	defer txp.mu.Unlock()
+	txp.mu.Lock()
+	if txp.hostCache == nil {
+		txp.hostCache = make(map[string]http.RoundTripper)
+	}
+	epnt := txp.makeEndpoint(address)
+	if uconn.ConnectionState().NegotiatedProtocol == "h2" {
+		uhttpLog.Printf("uhttp: hostCache put %s => h2#%p", epnt, txp.h2)
+		txp.hostCache[epnt] = txp.h2
+		return
+	}
+	uhttpLog.Printf("uhttp: hostCache put %s => https#%p", epnt, txp.https)
+	txp.hostCache[epnt] = txp.https
 }
 
-// Dial is like net.Dialer.Dial.
-func (d *uhttpForwardDialer) Dial(network, address string) (net.Conn, error) {
-	return d.fn(context.Background(), network, address)
+// connCachePut saves a connection that can be used later.
+func (txp *UHTTPTransport) connCachePut(address string, conn net.Conn) {
+	defer txp.mu.Unlock()
+	txp.mu.Lock()
+	if txp.connCache == nil {
+		txp.connCache = make(map[string][]net.Conn)
+	}
+	epnt := txp.makeEndpoint(address)
+	uhttpLog.Printf("uhttp: connCache put %s => conn#%s", epnt, conn.RemoteAddr().String())
+	txp.connCache[epnt] = append(txp.connCache[epnt], conn)
 }
 
-// DialContext is like net.Dialer.DialContext.
-func (d *uhttpForwardDialer) DialContext(
-	ctx context.Context, network, address string) (net.Conn, error) {
-	return d.fn(ctx, network, address)
-}
-
-// getDialContextFn returns the proper DialContext function to use. This
-// function will honor the configured ProxyURL, if any.
-func (txp *UHTTPTransport) getDialContextFn(ctx context.Context) (dialContextFn, error) {
-	dialFn := txp.DialContext
-	if dialFn == nil {
-		dialFn = (&net.Dialer{}).DialContext
-	}
-	proxyURL := uhttpContextWithProxyURL(ctx)
-	if proxyURL == nil {
-		return dialFn, nil
-	}
-	dialer, err := proxy.FromURL(proxyURL, &uhttpForwardDialer{dialFn})
-	if err != nil {
-		return nil, err
-	}
-	contextDialer, good := dialer.(proxy.ContextDialer)
-	if !good {
-		return nil, errors.New("uhttp: bug: cannot get a ContextDialer")
-	}
-	return contextDialer.DialContext, nil
-}
-
-// handshakeTimeout returns the TLS handshake timeout.
-func (txp *UHTTPTransport) tlsHandshakeTimeout() time.Duration {
-	if txp.TLSHandshakeTimeout > 0 {
-		return txp.TLSHandshakeTimeout
-	}
-	return 10 * time.Second
-}
-
-// utlsClientHelloID returns the utls.ClientHelloID
-// that we should be using for the handshake.
-func (txp *UHTTPTransport) utlsClientHelloSpecs() *utls.ClientHelloSpec {
-	if txp.UTLSClientHelloSpecs != nil {
-		return txp.UTLSClientHelloSpecs
-	}
-	return getChromeClientHelloSpecs()
-}
-
-// connCachePop extracts one of the connections in the cache
-// that are indexed by the provided address. Returns nil if
-// we don't have any entry in cache for the address.
+// connCachePop returns a connection that can be used now.
 func (txp *UHTTPTransport) connCachePop(address string) net.Conn {
 	defer txp.mu.Unlock()
 	txp.mu.Lock()
-	if cl, found := txp.connCache[address]; found && len(cl) >= 1 {
-		conn := cl[0]
-		cl = cl[1:]
-		if len(cl) >= 1 {
-			txp.connCache[address] = cl
-		} else {
-			delete(txp.connCache, address) // don't keep empty cache entries
-		}
-		uhttpLog.Printf("uhttp: connCache pop %s => conn#%s", address, conn.RemoteAddr())
-		return conn
+	epnt := txp.makeEndpoint(address)
+	if txp.connCache == nil || len(txp.connCache[epnt]) < 1 {
+		return nil
 	}
-	return nil
+	conn := txp.connCache[epnt][0]
+	txp.connCache[epnt] = txp.connCache[epnt][1:]
+	uhttpLog.Printf("uhttp: connCache pop %s => conn#%s", epnt, conn.RemoteAddr().String())
+	return conn
 }
 
-// CloseIdleConnections allows an http.Client controlling this
-// transport to close the idle connections.
+// CloseIdleConnections closes the idle connections.
 func (txp *UHTTPTransport) CloseIdleConnections() {
-	// Implementation note: cached connections are also
-	// cleaned up. Consider the case of a request that is
-	// interrupted via the context after it caused us to
-	// create a cached conn and before the RoundTripper has
-	// a chance to use the conn. Consider that after that
-	// the user calls CloseIdleConnections and then the
-	// transport goes out of scope. In such a case,
-	// we clearly want to get rid of the cached conn,
-	// otherwise we would leak the open conns.
-	if txp.cleartext != nil {
-		txp.cleartext.CloseIdleConnections()
-	}
-	if txp.https != nil {
-		txp.https.CloseIdleConnections()
-	}
-	if txp.h2 != nil {
-		txp.h2.CloseIdleConnections()
-	}
-	defer txp.mu.Unlock()
 	txp.mu.Lock()
-	for _, cl := range txp.connCache {
-		for _, conn := range cl {
-			conn.Close()
+	// The following are all the transports we're using that may
+	// be caching some connections that we want to close.
+	transports := []uhttpCloseableTransport{
+		txp.cleartext,
+		txp.onlyDial,
+		txp.https,
+		txp.h2,
+	}
+	// The connCache contains connections that are not yet inside
+	// any transport, so we also need to close them.
+	conns := txp.connCache
+	txp.connCache = nil
+	txp.mu.Unlock()
+	for _, t := range transports {
+		if t != nil {
+			t.CloseIdleConnections()
 		}
 	}
-	txp.connCache = nil
+	for _, v := range conns {
+		for _, c := range v {
+			c.Close()
+		}
+	}
 }

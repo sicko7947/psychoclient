@@ -1,9 +1,10 @@
 package psychoclient
 
 import (
-	"net/http"
 	"net/url"
 	"time"
+
+	http "github.com/bogdanfinn/fhttp"
 
 	"golang.org/x/net/proxy"
 )

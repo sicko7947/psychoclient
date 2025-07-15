@@ -3,8 +3,9 @@ package psychoclient
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"time"
+
+	http "github.com/bogdanfinn/fhttp"
 )
 
 var defaultTimeout time.Duration = 10 * time.Second
