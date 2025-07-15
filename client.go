@@ -22,11 +22,15 @@ func newDefaultClient(
 		proxy, _ = url.Parse(proxyURL[0])
 	} else {
 		return http.Client{
-			Transport: &http.Transport{},
+			Transport:     &http.Transport{},
+			CheckRedirect: redirectCallback,
+			Timeout:       timeout,
 		}, nil
 	}
 
 	return http.Client{
+		Timeout:       timeout,
+		CheckRedirect: redirectCallback,
 		Transport: &http.Transport{
 			Proxy: http.ProxyURL(proxy),
 		},
@@ -52,7 +56,8 @@ func newClient(useDefaultClient bool, followRedirects bool, timeout time.Duratio
 			return http.Client{
 				CheckRedirect: redirectCallback,
 				Transport: &UHTTPTransport{
-					DialContext: dialer.DialContext,
+					DialContext:          dialer.DialContext,
+					UTLSClientHelloSpecs: getChromeClientHelloSpecs(),
 				},
 				Timeout: timeout,
 			}, err
@@ -63,7 +68,8 @@ func newClient(useDefaultClient bool, followRedirects bool, timeout time.Duratio
 	return http.Client{
 		CheckRedirect: redirectCallback,
 		Transport: &UHTTPTransport{
-			DialContext: dialer.DialContext,
+			DialContext:          dialer.DialContext,
+			UTLSClientHelloSpecs: getChromeClientHelloSpecs(),
 		},
 	}, nil
 }
