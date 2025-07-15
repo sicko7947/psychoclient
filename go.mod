@@ -12,7 +12,7 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.2.0 // indirect
-	github.com/cloudflare/circl v1.5.0 // indirect
+	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	go.opentelemetry.io/otel v1.37.0 // indirect
