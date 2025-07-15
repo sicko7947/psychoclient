@@ -187,7 +187,7 @@ func (txp *UHTTPTransport) utlsClientHelloSpecs() *utls.ClientHelloSpec {
 	if txp.UTLSClientHelloSpecs != nil {
 		return txp.UTLSClientHelloSpecs
 	}
-	return getChromeClientHelloSpecs()
+	return getFirefox135ClientHelloSpecs()
 }
 
 // RoundTrip implements http.RoundTripper.RoundTrip.
@@ -344,13 +344,15 @@ func (txp *UHTTPTransport) maybeInitTxps() {
 			uhttpCloseableTransport: &http2.Transport{
 				DialTLS: txp.connCacheDialTLSH2,
 				Settings: map[http2.SettingID]uint32{
-					http2.SettingMaxConcurrentStreams: 1000,
-					http2.SettingMaxFrameSize:         16384,
-					http2.SettingMaxHeaderListSize:    262144,
+					http2.SettingHeaderTableSize:   65536,
+					http2.SettingEnablePush:        0,
+					http2.SettingInitialWindowSize: 6291456,
+					http2.SettingMaxHeaderListSize: 262144,
 				},
 				SettingsOrder: []http2.SettingID{
-					http2.SettingMaxConcurrentStreams,
-					http2.SettingMaxFrameSize,
+					http2.SettingHeaderTableSize,
+					http2.SettingEnablePush,
+					http2.SettingInitialWindowSize,
 					http2.SettingMaxHeaderListSize,
 				},
 				InitialWindowSize: 6291456,
@@ -422,7 +424,7 @@ func (txp *UHTTPTransport) dialUTLSContext(
 		return nil, err
 	}
 	config.ServerName = host
-	uconn := utls.UClient(rawConn, config, utls.HelloCustom, false, false)
+	uconn := utls.UClient(rawConn, config, utls.HelloChrome_100, false, false)
 	if err := uconn.ApplyPreset(txp.utlsClientHelloSpecs()); err != nil {
 		rawConn.Close()
 		return nil, err

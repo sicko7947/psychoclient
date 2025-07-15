@@ -2,9 +2,10 @@ package psychoclient
 
 import (
 	utls "github.com/bogdanfinn/utls"
+	"github.com/bogdanfinn/utls/dicttls"
 )
 
-func getFirefoxClientHelloSpecs() *utls.ClientHelloSpec {
+func getFirefox135ClientHelloSpecs() *utls.ClientHelloSpec {
 	return &utls.ClientHelloSpec{
 		CipherSuites: []uint16{
 			utls.TLS_AES_128_GCM_SHA256,
@@ -26,31 +27,40 @@ func getFirefoxClientHelloSpecs() *utls.ClientHelloSpec {
 			utls.TLS_RSA_WITH_AES_256_CBC_SHA,
 		},
 		CompressionMethods: []byte{
-			0x00, // compressionNone
+			utls.CompressionNone,
 		},
 		Extensions: []utls.TLSExtension{
 			&utls.SNIExtension{},
 			&utls.ExtendedMasterSecretExtension{},
-			&utls.RenegotiationInfoExtension{Renegotiation: utls.RenegotiateOnceAsClient},
+			&utls.RenegotiationInfoExtension{
+				Renegotiation: utls.RenegotiateOnceAsClient,
+			},
 			&utls.SupportedCurvesExtension{Curves: []utls.CurveID{
-				utls.CurveID(4588), // X25519MLKEM768
+				utls.X25519MLKEM768,
 				utls.X25519,
 				utls.CurveP256,
 				utls.CurveP384,
 				utls.CurveP521,
-				utls.CurveID(256), // ffdhe2048
-				utls.CurveID(257), // ffdhe3072
+				utls.FAKEFFDHE2048,
+				utls.FAKEFFDHE3072,
 			}},
 			&utls.SupportedPointsExtension{SupportedPoints: []byte{
-				0x00, // pointFormatUncompressed
+				utls.PointFormatUncompressed,
 			}},
-			&utls.SessionTicketExtension{},
-			&utls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
+			&utls.ALPNExtension{AlpnProtocols: []string{
+				"h2",
+				"http/1.1",
+			}},
 			&utls.StatusRequestExtension{},
-			&utls.GenericExtension{Id: 34, Data: []byte{}}, // delegated_credentials
+			&utls.DelegatedCredentialsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
+				utls.ECDSAWithP256AndSHA256,
+				utls.ECDSAWithP384AndSHA384,
+				utls.ECDSAWithP521AndSHA512,
+				utls.ECDSAWithSHA1,
+			}},
 			&utls.SCTExtension{},
 			&utls.KeyShareExtension{KeyShares: []utls.KeyShare{
-				{Group: utls.CurveID(4588)}, // X25519MLKEM768
+				{Group: utls.X25519MLKEM768},
 				{Group: utls.X25519},
 				{Group: utls.CurveP256},
 			}},
@@ -71,12 +81,29 @@ func getFirefoxClientHelloSpecs() *utls.ClientHelloSpec {
 				utls.ECDSAWithSHA1,
 				utls.PKCS1WithSHA1,
 			}},
-			&utls.PSKKeyExchangeModesExtension{Modes: []uint8{
-				utls.PskModeDHE,
+			&utls.FakeRecordSizeLimitExtension{Limit: 0x4001},
+			&utls.UtlsCompressCertExtension{Algorithms: []utls.CertCompressionAlgo{
+				utls.CertCompressionZlib,
+				utls.CertCompressionBrotli,
+				utls.CertCompressionZstd,
 			}},
-			&utls.GenericExtension{Id: 28, Data: []byte{0x40, 0x01}},       // record_size_limit
-			&utls.GenericExtension{Id: 27, Data: []byte{0x01, 0x02, 0x03}}, // compress_certificate
-			&utls.GenericExtension{Id: 65037, Data: []byte{}},              // extensionEncryptedClientHello
+			&utls.GREASEEncryptedClientHelloExtension{
+				CandidateCipherSuites: []utls.HPKESymmetricCipherSuite{
+					{
+						KdfId:  dicttls.HKDF_SHA256,
+						AeadId: dicttls.AEAD_AES_128_GCM,
+					},
+					{
+						KdfId:  dicttls.HKDF_SHA256,
+						AeadId: dicttls.AEAD_AES_256_GCM,
+					},
+					{
+						KdfId:  dicttls.HKDF_SHA256,
+						AeadId: dicttls.AEAD_CHACHA20_POLY1305,
+					},
+				},
+				CandidatePayloadLens: []uint16{128, 223}, // +16: 144, 239
+			},
 		},
 	}
 }
@@ -102,36 +129,10 @@ func getChromeClientHelloSpecs() *utls.ClientHelloSpec {
 			utls.TLS_RSA_WITH_AES_256_CBC_SHA,
 		},
 		CompressionMethods: []byte{
-			0x00, // compressionNone
+			utls.CompressionNone,
 		},
 		Extensions: []utls.TLSExtension{
 			&utls.UtlsGREASEExtension{},
-			&utls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
-			&utls.SCTExtension{},
-			&utls.SupportedCurvesExtension{Curves: []utls.CurveID{
-				utls.CurveID(utls.GREASE_PLACEHOLDER),
-				utls.CurveID(4588), // X25519MLKEM768
-				utls.X25519,
-				utls.CurveP256,
-				utls.CurveP384,
-			}},
-			&utls.SupportedVersionsExtension{Versions: []uint16{
-				utls.GREASE_PLACEHOLDER,
-				utls.VersionTLS13,
-				utls.VersionTLS12,
-			}},
-			&utls.ExtendedMasterSecretExtension{},
-			&utls.KeyShareExtension{KeyShares: []utls.KeyShare{
-				{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0x00}},
-				{Group: utls.CurveID(4588)}, // X25519MLKEM768
-				{Group: utls.X25519},
-			}},
-			&utls.SNIExtension{},
-			&utls.RenegotiationInfoExtension{Renegotiation: utls.RenegotiateOnceAsClient},
-			&utls.GenericExtension{Id: 17613, Data: []byte{0x02, 0x68, 0x32}}, // application_settings
-			&utls.PSKKeyExchangeModesExtension{Modes: []uint8{
-				utls.PskModeDHE,
-			}},
 			&utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
 				utls.ECDSAWithP256AndSHA256,
 				utls.PSSWithSHA256,
@@ -142,14 +143,48 @@ func getChromeClientHelloSpecs() *utls.ClientHelloSpec {
 				utls.PSSWithSHA512,
 				utls.PKCS1WithSHA512,
 			}},
-			&utls.SessionTicketExtension{},
-			&utls.StatusRequestExtension{},
-			&utls.GenericExtension{Id: 65037, Data: []byte{}}, // extensionEncryptedClientHello
-			&utls.SupportedPointsExtension{SupportedPoints: []byte{
-				0x00, // pointFormatUncompressed
+			utls.BoringGREASEECH(),
+			&utls.RenegotiationInfoExtension{
+				Renegotiation: utls.RenegotiateOnceAsClient,
+			},
+			&utls.SCTExtension{},
+			&utls.UtlsCompressCertExtension{Algorithms: []utls.CertCompressionAlgo{
+				utls.CertCompressionBrotli,
 			}},
-			&utls.GenericExtension{Id: 27, Data: []byte{0x02}}, // compress_certificate (brotli only)
+			&utls.ALPNExtension{AlpnProtocols: []string{
+				"h2",
+				"http/1.1",
+			}},
+			&utls.StatusRequestExtension{},
+			&utls.SupportedCurvesExtension{Curves: []utls.CurveID{
+				utls.GREASE_PLACEHOLDER,
+				utls.X25519,
+				utls.CurveP256,
+				utls.CurveP384,
+			}},
+			&utls.ApplicationSettingsExtension{
+				SupportedProtocols: []string{"h2"},
+			},
+			&utls.SupportedPointsExtension{SupportedPoints: []byte{
+				utls.PointFormatUncompressed,
+			}},
+			&utls.KeyShareExtension{KeyShares: []utls.KeyShare{
+				{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
+				{Group: utls.X25519},
+			}},
+			&utls.SessionTicketExtension{},
+			&utls.SupportedVersionsExtension{Versions: []uint16{
+				utls.GREASE_PLACEHOLDER,
+				utls.VersionTLS13,
+				utls.VersionTLS12,
+			}},
+			&utls.PSKKeyExchangeModesExtension{Modes: []uint8{
+				utls.PskModeDHE,
+			}},
+			&utls.SNIExtension{},
+			&utls.ExtendedMasterSecretExtension{},
 			&utls.UtlsGREASEExtension{},
+			&utls.UtlsPreSharedKeyExtension{},
 		},
 	}
 }
