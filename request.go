@@ -1,10 +1,10 @@
 package psychoclient
 
 import (
-	"io/ioutil"
+	"fmt"
+	"io"
+	"net/http"
 	"time"
-
-	http "github.com/zMrKrabz/fhttp"
 )
 
 var defaultTimeout time.Duration = 10 * time.Second
@@ -56,7 +56,6 @@ func (c *Client) DoNewRequest(b *RequestBuilder) (res *http.Response, respBody [
 	}()
 
 	response := <-channel // waiting for channel to receive response
-
 	res = response.httpResponse
 	err = response.err
 
@@ -64,10 +63,10 @@ func (c *Client) DoNewRequest(b *RequestBuilder) (res *http.Response, respBody [
 		// set response body
 		if res.Body != nil {
 			defer response.httpResponse.Body.Close()
-			body, e := ioutil.ReadAll(res.Body)
+			body, e := io.ReadAll(res.Body)
 			respBody = body
 			if e != nil {
-				err = err
+				err = fmt.Errorf("error reading response body: %v", e)
 			}
 		}
 	}
@@ -120,10 +119,10 @@ func (c *Client) RoundTripNewRequest(b *RequestBuilder) (res *http.Response, res
 		// set response body
 		if res.Body != nil {
 			defer response.httpResponse.Body.Close()
-			body, e := ioutil.ReadAll(res.Body)
+			body, e := io.ReadAll(res.Body)
 			respBody = body
 			if e != nil {
-				err = err
+				err = fmt.Errorf("error reading response body: %v", e)
 			}
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -14,8 +15,7 @@ import (
 	"time"
 
 	utls "github.com/refraction-networking/utls"
-	http "github.com/zMrKrabz/fhttp"
-	"github.com/zMrKrabz/fhttp/http2"
+	"golang.org/x/net/http2"
 	"golang.org/x/net/idna"
 	"golang.org/x/net/proxy"
 )
@@ -334,14 +334,6 @@ func (txp *UHTTPTransport) maybeInitTxps() {
 		txp.h2 = &uhttpStringer{
 			uhttpCloseableTransport: &http2.Transport{
 				DialTLS: txp.connCacheDialTLSH2,
-				Settings: []http2.Setting{
-					{ID: http2.SettingMaxConcurrentStreams, Val: 1000},
-					{ID: http2.SettingMaxFrameSize, Val: 16384},
-					{ID: http2.SettingMaxHeaderListSize, Val: 262144},
-				},
-				InitialWindowSize: 6291456,
-				HeaderTableSize:   65536,
-				PushHandler:       &http2.DefaultPushHandler{},
 			},
 			name: "h2",
 		}

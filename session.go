@@ -2,11 +2,9 @@ package psychoclient
 
 import (
 	"io"
-	"io/ioutil"
+	"net/http"
 	"strings"
 	"time"
-
-	http "github.com/zMrKrabz/fhttp"
 
 	"github.com/gogf/gf/v2/container/gmap"
 	"github.com/google/uuid"
@@ -163,7 +161,7 @@ func (a *session) Do(reqID string, remove ...bool) (res *http.Response, respBody
 		// set response body
 		if res.Body != nil {
 			defer response.httpResponse.Body.Close()
-			body, e := ioutil.ReadAll(res.Body)
+			body, e := io.ReadAll(res.Body)
 			respBody = body
 			if e != nil {
 				err = err
@@ -228,10 +226,10 @@ func (a *session) RoundTrip(reqID string, remove ...bool) (res *http.Response, r
 		// set response body
 		if res.Body != nil {
 			defer response.httpResponse.Body.Close()
-			body, e := ioutil.ReadAll(res.Body)
+			body, e := io.ReadAll(res.Body)
 			respBody = body
 			if e != nil {
-				err = err
+				err = e
 			}
 		}
 	}

@@ -1,10 +1,10 @@
 package psychoclient
 
 import (
+	"net/http"
 	"net/url"
 	"time"
 
-	http "github.com/zMrKrabz/fhttp"
 	"golang.org/x/net/proxy"
 )
 
@@ -22,11 +22,15 @@ func newDefaultClient(
 		proxy, _ = url.Parse(proxyURL[0])
 	} else {
 		return http.Client{
-			Transport: &http.Transport{},
+			Transport:     &http.Transport{},
+			CheckRedirect: redirectCallback,
+			Timeout:       timeout,
 		}, nil
 	}
 
 	return http.Client{
+		Timeout:       timeout,
+		CheckRedirect: redirectCallback,
 		Transport: &http.Transport{
 			Proxy: http.ProxyURL(proxy),
 		},

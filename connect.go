@@ -8,12 +8,11 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"sync"
 
-	http "github.com/zMrKrabz/fhttp"
-
-	"github.com/zMrKrabz/fhttp/http2"
+	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
 )
 
@@ -210,16 +209,7 @@ func (c *connectDialer) DialContext(ctx context.Context, network, address string
 	case "http/1.1":
 		return connectHttp1(rawConn)
 	case "h2":
-		t := http2.Transport{
-			Settings: []http2.Setting{
-				{ID: http2.SettingMaxConcurrentStreams, Val: 1000},
-				{ID: http2.SettingMaxFrameSize, Val: 16384},
-				{ID: http2.SettingMaxHeaderListSize, Val: 262144},
-			},
-			InitialWindowSize: 6291456,
-			HeaderTableSize:   65536,
-			PushHandler:       &http2.DefaultPushHandler{},
-		}
+		t := http2.Transport{}
 		h2clientConn, err := t.NewClientConn(rawConn)
 		if err != nil {
 			_ = rawConn.Close()
