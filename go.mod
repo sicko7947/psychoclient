@@ -3,6 +3,7 @@ module github.com/sicko7947/psychoclient
 go 1.24
 
 require (
+	github.com/bogdanfinn/utls v1.6.5
 	github.com/gogf/gf/v2 v2.9.0
 	github.com/google/uuid v1.6.0
 	github.com/refraction-networking/utls v1.7.3
