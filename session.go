@@ -164,7 +164,7 @@ func (a *session) Do(reqID string, remove ...bool) (res *http.Response, respBody
 			body, e := io.ReadAll(res.Body)
 			respBody = body
 			if e != nil {
-				err = err
+				err = e
 			}
 		}
 	}
