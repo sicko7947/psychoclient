@@ -6,7 +6,7 @@ require (
 	github.com/bogdanfinn/utls v1.7.5-barnius
 	github.com/gogf/gf/v2 v2.9.7
 	github.com/google/uuid v1.6.0
-	github.com/refraction-networking/utls v1.8.1
+	github.com/refraction-networking/utls v1.8.2
 	golang.org/x/net v0.48.0
 )
 
